@@ -1,6 +1,5 @@
 package vn.hoidanit.jobhunter.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -9,12 +8,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class StaticResourcesWebConfiguration
         implements WebMvcConfigurer {
 
-    @Value("${hoidanit.upload-file.base-uri}")
-    private String baseURI;
-
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // Cấu hình để truy cập file từ thư mục public trong project
+        // URL: /storage/** sẽ map tới thư mục public/
         registry.addResourceHandler("/storage/**")
-                .addResourceLocations(baseURI);
+                .addResourceLocations("file:public/");
     }
 }

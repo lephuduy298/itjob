@@ -2,7 +2,6 @@ package vn.hoidanit.jobhunter.controller;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -44,7 +43,7 @@ public class FileController {
             @RequestParam(name = "file", required = false) MultipartFile file,
             @RequestParam("folder") String folder
 
-    ) throws URISyntaxException, IOException, StorageException {
+    ) throws IOException, StorageException {
         // skip validate
         if (file == null || file.isEmpty()) {
             throw new StorageException("File is empty. Please upload a file.");
@@ -72,7 +71,7 @@ public class FileController {
     public ResponseEntity<Resource> download(
             @RequestParam(name = "fileName", required = false) String fileName,
             @RequestParam(name = "folder", required = false) String folder)
-            throws StorageException, URISyntaxException, FileNotFoundException {
+            throws StorageException, FileNotFoundException {
         if (fileName == null || folder == null) {
             throw new StorageException("Missing required params : (fileName or folder) in query params.");
         }
