@@ -55,11 +55,19 @@ public class FileController {
         if (!isValid) {
             throw new StorageException("Invalid file extension. only allows " + allowedExtensions.toString());
         }
-        // create a directory if not exist
-        this.fileService.createDirectory(baseURI + folder);
+        // map folder: if client requested 'company' store under public/image/company
+        String mappedFolder = "";
+        if (folder != null && "company".equalsIgnoreCase(folder.trim())) {
+            mappedFolder = "image/company";
+        } else {
+            mappedFolder = folder;
+        }
 
-        // store file
-        String uploadFile = this.fileService.store(file, folder);
+        // create a directory if not exist (pass full path: baseURI + mappedFolder)
+        this.fileService.createDirectory(baseURI + mappedFolder);
+
+        // store file using mapped folder
+        String uploadFile = this.fileService.store(file, mappedFolder);
 
         ResUploadFileDTO res = new ResUploadFileDTO(uploadFile, Instant.now());
 
@@ -76,14 +84,22 @@ public class FileController {
             throw new StorageException("Missing required params : (fileName or folder) in query params.");
         }
 
+        // map folder same as upload (company -> image/company)
+        String mappedFolder = "";
+        if (folder != null && "company".equalsIgnoreCase(folder.trim())) {
+            mappedFolder = "image/company";
+        } else {
+            mappedFolder = folder;
+        }
+
         // check file exist (and not a directory)
-        long fileLength = this.fileService.getFileLength(fileName, folder);
+        long fileLength = this.fileService.getFileLength(fileName, mappedFolder);
         if (fileLength == 0) {
             throw new StorageException("File with name = " + fileName + " not found.");
         }
 
         // download a file
-        InputStreamResource resource = this.fileService.getResource(fileName, folder);
+        InputStreamResource resource = this.fileService.getResource(fileName, mappedFolder);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
