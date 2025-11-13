@@ -9,15 +9,18 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import java.nio.file.Paths;
 
 import vn.hoidanit.jobhunter.domain.response.file.ResUploadFileDTO;
 import vn.hoidanit.jobhunter.service.FileService;
@@ -106,5 +109,56 @@ public class FileController {
                 .contentLength(fileLength)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
+    }
+
+    @GetMapping("/public/images/{imageName}")
+    @ApiMessage("View an image")
+    public ResponseEntity<?> viewImage(@PathVariable(name = "imageName") String imageName) {
+        try {
+            java.nio.file.Path imagePath = Paths.get("public/image/company/" + imageName);
+            UrlResource resource = new UrlResource(imagePath.toUri());
+
+            if (resource.exists() && resource.isReadable()) {
+                // Xác định content type dựa trên extension
+                String contentType = MediaType.IMAGE_JPEG_VALUE;
+                if (imageName.toLowerCase().endsWith(".png")) {
+                    contentType = MediaType.IMAGE_PNG_VALUE;
+                } else if (imageName.toLowerCase().endsWith(".gif")) {
+                    contentType = MediaType.IMAGE_GIF_VALUE;
+                }
+
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(contentType))
+                        .body(resource);
+            } else {
+                // Nếu ảnh không tồn tại, trả về ảnh imagenotfound
+                java.nio.file.Path notFoundPath = Paths.get("public/image/company/imagenotfound.png");
+                UrlResource notFoundResource = new UrlResource(notFoundPath.toUri());
+
+                if (notFoundResource.exists() && notFoundResource.isReadable()) {
+                    return ResponseEntity.ok()
+                            .contentType(MediaType.IMAGE_JPEG)
+                            .body(notFoundResource);
+                } else {
+                    // Nếu cả imagenotfound.jpg cũng không có, trả về 404
+                    return ResponseEntity.notFound().build();
+                }
+            }
+        } catch (Exception e) {
+            // Nếu có lỗi, cố gắng trả về imagenotfound
+            try {
+                java.nio.file.Path notFoundPath = Paths.get("public/image/company/imagenotfound.jpg");
+                UrlResource notFoundResource = new UrlResource(notFoundPath.toUri());
+
+                if (notFoundResource.exists() && notFoundResource.isReadable()) {
+                    return ResponseEntity.ok()
+                            .contentType(MediaType.IMAGE_JPEG)
+                            .body(notFoundResource);
+                }
+            } catch (Exception ex) {
+                // Ignore
+            }
+            return ResponseEntity.notFound().build();
+        }
     }
 }
