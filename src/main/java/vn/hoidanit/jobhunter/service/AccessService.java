@@ -145,9 +145,8 @@ public class AccessService {
                 ? ""
                 : user.getRole().getName().toUpperCase();
 
-        // ADMIN / SUPER_ADMIN: luôn cho qua tất cả action
-        if ("ADMIN".equals(role) || "SUPER_ADMIN".equals(role)
-                || "ROLE_ADMIN".equals(role) || "ROLE_SUPER_ADMIN".equals(role)) {
+        // ADMIN làm được tất cả
+        if (role.contains("ADMIN")) {
             return true;
         }
 
