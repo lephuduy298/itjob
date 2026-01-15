@@ -168,17 +168,10 @@ public class AccessService {
         String roleName = user.getRole() != null ? user.getRole().getName() : "";
         roleName = roleName.trim().toUpperCase();
 
-
-        if ("ADMIN".equals(roleName) || "SUPER_ADMIN".equals(roleName)
-                || "ROLE_ADMIN".equals(roleName) || "ROLE_SUPER_ADMIN".equals(roleName)) {
-            return null;
-        }
-
         // Chỉ redirect pricing khi QUOTA_EXCEEDED hoặc NO_SUBSCRIPTION
         if (!"QUOTA_EXCEEDED".equals(status) && !"NO_SUBSCRIPTION".equals(status)) {
             return null;
         }
-
 
         // USER*, USER_VIP
         if (roleName.startsWith("USER")) {
