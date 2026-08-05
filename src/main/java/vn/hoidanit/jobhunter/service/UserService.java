@@ -28,6 +28,7 @@ import vn.hoidanit.jobhunter.domain.response.ResCreateUserDTO;
 import vn.hoidanit.jobhunter.domain.response.ResUpdateUserDTO;
 import vn.hoidanit.jobhunter.domain.response.ResUserDTO;
 import vn.hoidanit.jobhunter.domain.response.ResultPaginationDTO;
+import vn.hoidanit.jobhunter.repository.RoleRepository;
 import vn.hoidanit.jobhunter.repository.UserRepository;
 import vn.hoidanit.jobhunter.util.SecurityUtil;
 import vn.hoidanit.jobhunter.util.constant.StatusEnum;
@@ -37,15 +38,17 @@ import vn.hoidanit.jobhunter.util.constant.StatusEnum;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final CompanyService companyService;
     private final RoleService roleService;
     private final UserProfileService userProfileService;
 
-    public UserService(UserRepository userRepository,
-            CompanyService companyService,
-            RoleService roleService,
-            UserProfileService userProfileService) {
+    public UserService(UserRepository userRepository, RoleRepository roleRepository,
+                       CompanyService companyService,
+                       RoleService roleService,
+                       UserProfileService userProfileService) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.companyService = companyService;
         this.roleService = roleService;
         this.userProfileService = userProfileService;
@@ -333,5 +336,37 @@ public class UserService {
             user.setLastSeen(lastSeen);
             userRepository.save(user);
         }
+    }
+
+    @Transactional
+    public void updateRoleAfterPurchase(Long userId, String audience, String tier) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+
+        String roleName;
+
+        if ("USER".equalsIgnoreCase(audience)) {
+            roleName = "STANDARD".equalsIgnoreCase(tier)
+                    ? "USER_VIP"
+                    : "USER";
+        }
+        else if ("HR".equalsIgnoreCase(audience)) {
+            roleName = "STANDARD".equalsIgnoreCase(tier)
+                    ? "HR_VIP"
+                    : "HR";
+        }
+        else {
+            return;
+        }
+
+        Role newRole = roleRepository.findByName(roleName);
+
+        if (user.getRole() != null && user.getRole().getId() == newRole.getId()) {
+            return;
+        }
+
+        user.setRole(newRole);
+        userRepository.save(user);
     }
 }

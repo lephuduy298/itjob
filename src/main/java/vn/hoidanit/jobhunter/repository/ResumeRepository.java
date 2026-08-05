@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import vn.hoidanit.jobhunter.domain.Resume;
 
+import java.time.Instant;
 import java.util.Optional;
 
 @Repository
@@ -20,5 +21,5 @@ public interface ResumeRepository extends JpaRepository<Resume, Long>,
 
         Page<Resume> findByJobId(Long jobId, Pageable pageable);
 
-
+        long countByCreatedAtBetween(Instant start, Instant end);
 }

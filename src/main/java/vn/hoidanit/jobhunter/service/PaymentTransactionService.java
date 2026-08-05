@@ -12,11 +12,8 @@ import vn.hoidanit.jobhunter.domain.response.SepayQrResponse;
 import vn.hoidanit.jobhunter.repository.PaymentTransactionRepository;
 import vn.hoidanit.jobhunter.util.constant.PaymentStatus;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,12 +26,14 @@ public class PaymentTransactionService {
     private final SepayQrProperties sepayQrProperties;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SubscriptionService subscriptionService;
+    private final UserService userService;
 
     public PaymentTransactionService(PaymentTransactionRepository paymentTransactionRepository,
-            SepayQrProperties sepayQrProperties, SubscriptionService subscriptionService) {
+                                     SepayQrProperties sepayQrProperties, SubscriptionService subscriptionService, UserService userService) {
         this.paymentTransactionRepository = paymentTransactionRepository;
         this.sepayQrProperties = sepayQrProperties;
         this.subscriptionService = subscriptionService;
+        this.userService = userService;
     }
 
     @Transactional
@@ -132,23 +131,21 @@ public class PaymentTransactionService {
         log.info("Processing Sepay webhook: id={}, amount={}, transferType={}, content={}",
                 dto.getId(), dto.getTransferAmount(), dto.getTransferType(), dto.getContent());
 
-        // Kiểm tra loại giao dịch (chỉ xử lý tiền vào)
+        // 1) Chỉ xử lý tiền vào
         if (!"in".equalsIgnoreCase(dto.getTransferType())) {
             log.warn("Ignoring webhook with transferType: {}", dto.getTransferType());
-            return; // ignore tiền ra
+            return;
         }
 
-        // Parse transactionId from content
+        // 2) Parse txId từ content
         Long txId = extractTransactionId(dto.getContent());
         if (txId == null) {
             log.error("Cannot extract transactionId from content: {}", dto.getContent());
             throw new IllegalArgumentException("Cannot extract transactionId from content");
         }
-        log.info("Extracted transaction ID: {}", txId);
 
-        // Tìm transaction trong DB
-        PaymentTransaction tx = paymentTransactionRepository
-                .findById(txId)
+        // 3) Lock transaction row để chống webhook trùng / race condition
+        PaymentTransaction tx = paymentTransactionRepository.findByIdForUpdate(txId)
                 .orElseThrow(() -> {
                     log.error("Transaction not found in database: {}", txId);
                     return new IllegalStateException("Transaction not found: " + txId);
@@ -157,48 +154,54 @@ public class PaymentTransactionService {
         log.info("Found transaction in DB: id={}, status={}, amount={}",
                 tx.getId(), tx.getStatus(), tx.getAmount());
 
-        if (tx.getStatus() == PaymentStatus.EXPIRED) {
-            log.warn("Received SUCCESS webhook for EXPIRED transaction {}", tx.getId());
-
-            // option 1: bỏ qua
-            return;
-
-        }
-
+        // 4) Idempotent
         if (tx.getStatus() == PaymentStatus.SUCCESS) {
             log.info("Transaction {} already SUCCESS, ignore duplicate webhook", tx.getId());
             return;
         }
-
-        // verify business
-        try {
-            verifyWebhookBusiness(tx, dto.getTransferAmount());
-            log.info("Business validation passed");
-        } catch (Exception e) {
-            log.error("Business validation failed: {}", e.getMessage());
-            throw e;
+        if (tx.getStatus() == PaymentStatus.EXPIRED) {
+            log.warn("Received webhook for EXPIRED transaction {}, ignore", tx.getId());
+            return;
         }
 
-        // Update transaction
+        // 5) Validate business (số tiền, vv.)
+        verifyWebhookBusiness(tx, dto.getTransferAmount());
+
+        // 6) Update transaction -> SUCCESS
         tx.setStatus(PaymentStatus.SUCCESS);
         tx.setExternalRef(String.valueOf(dto.getId()));
         tx.setPaidAt(java.time.LocalDateTime.now());
         tx.setPayload(safeToJson(dto));
-
         paymentTransactionRepository.save(tx);
-        log.info("Updated transaction {} to SUCCESS status", tx.getId());
 
-        // Activate subscription
-        try {
-            subscriptionService.activateSubscriptionAndInitMonthlyUsage(tx.getSubscription().getId());
-            log.info("Activated subscription {} successfully", tx.getSubscription().getId());
-        } catch (Exception e) {
-            log.error("Failed to activate subscription {}: {}",
-                    tx.getSubscription().getId(), e.getMessage());
-            throw e;
-        }
+        log.info("Updated transaction {} to SUCCESS", tx.getId());
 
+        // 7) Activate subscription mới + xóa subscription cũ (logic replace nằm trong service này)
+        Subscription activated = subscriptionService
+                .activateSubscriptionAndInitMonthlyUsage(tx.getSubscription().getId());
+
+        log.info("Activated subscription {} for userId={}", activated.getId(), activated.getUser().getId());
+
+        // 8) Update role theo plan mới (dùng activated để chắc chắn đúng data sau khi replace)
+        var plan = activated.getPlan();
+        userService.updateRoleAfterPurchase(
+                activated.getUser().getId(),
+                plan.getAudience(),
+                plan.getTier()
+        );
+
+        log.info("Updated role for userId={} audience={} tier={}",
+                activated.getUser().getId(), plan.getAudience(), plan.getTier());
+
+        // 9) Dọn transaction cũ: chỉ xóa non-success, giữ SUCCESS để còn lịch sử đối soát
+        Long userId = activated.getUser().getId();
+        Long keepTxId = tx.getId();
+
+        int deleted = paymentTransactionRepository.deleteNonSuccessByUserIdExcept(userId, keepTxId);
+        log.info("Deleted {} non-success old transactions for userId={}, kept txId={}",
+                deleted, userId, keepTxId);
     }
+
 
     public PaymentTransaction getTransactionById(Long id) {
         return paymentTransactionRepository.findById(id)

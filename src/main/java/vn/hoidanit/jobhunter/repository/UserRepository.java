@@ -8,6 +8,8 @@ import org.springframework.stereotype.Repository;
 
 import vn.hoidanit.jobhunter.domain.Company;
 import vn.hoidanit.jobhunter.domain.User;
+
+import java.time.Instant;
 import java.util.List;
 
 @Repository
@@ -34,8 +36,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      * @return Danh sách users có ít nhất 1 skill trùng với job
      */
     @Query("SELECT DISTINCT u FROM User u " +
-           "INNER JOIN u.profile up " +
-           "INNER JOIN up.skills s " +
-           "WHERE s.id IN :skillIds ")
+            "INNER JOIN u.profile up " +
+            "INNER JOIN up.skills s " +
+            "WHERE s.id IN :skillIds ")
     List<User> findUsersWithMatchingSkills(@Param("skillIds") List<Long> skillIds);
+
+    long countByCreatedAtAfter(Instant createdAt);
+
+    long countByCreatedAtBetween(Instant start, Instant end);
 }

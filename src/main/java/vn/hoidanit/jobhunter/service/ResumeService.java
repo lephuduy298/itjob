@@ -27,6 +27,7 @@ import vn.hoidanit.jobhunter.repository.JobRepository;
 import vn.hoidanit.jobhunter.repository.ResumeRepository;
 import vn.hoidanit.jobhunter.repository.UserRepository;
 import vn.hoidanit.jobhunter.util.SecurityUtil;
+import vn.hoidanit.jobhunter.util.constant.AccessAction;
 
 @Service
 @Slf4j
@@ -43,14 +44,17 @@ public class ResumeService {
     private final ResumeRepository resumeRepository;
     private final UserRepository userRepository;
     private final JobRepository jobRepository;
+    private final AccessService accessService;
+
 
     public ResumeService(
             ResumeRepository resumeRepository,
             UserRepository userRepository,
-            JobRepository jobRepository) {
+            JobRepository jobRepository, AccessService accessService) {
         this.resumeRepository = resumeRepository;
         this.userRepository = userRepository;
         this.jobRepository = jobRepository;
+        this.accessService = accessService;
     }
 
     public Optional<Resume> fetchById(long id) {
@@ -92,6 +96,8 @@ public class ResumeService {
         res.setId(resume.getId());
         res.setCreatedBy(resume.getCreatedBy());
         res.setCreatedAt(resume.getCreatedAt());
+
+        accessService.consumeOrThrow(AccessAction.APPLY_JOB);
 
         return res;
     }

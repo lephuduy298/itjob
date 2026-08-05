@@ -170,4 +170,12 @@ public class ResumeController {
         return ResponseEntity.ok().body(this.resumeService.fetchAllResumeByJobId(id, pageable));
     }
 
+    @GetMapping("/resumes/all")
+    @ApiMessage("Get all resumes (Admin only)")
+    public ResponseEntity<ResultPaginationDTO> fetchAllResumes(
+            @Filter Specification<Resume> spec,
+            Pageable pageable) {
+        return ResponseEntity.ok().body(this.resumeService.fetchAllResume(spec, pageable));
+    }
+
 }

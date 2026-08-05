@@ -58,4 +58,27 @@ public class SubscriptionController {
         service.delete(id);
         return ResponseEntity.status(HttpStatus.OK).body(null);
     }
+
+    @GetMapping("/user/{userId}/active")
+    public ResponseEntity<SubscriptionResponse> getActiveSubscription(@PathVariable Long userId) {
+        Subscription active = service.findActiveSubscription(userId);
+
+        // Không có subscription đang hoạt động
+        if (active == null) {
+            return ResponseEntity.ok(null);
+        }
+
+        SubscriptionResponse dto = SubscriptionResponse.builder()
+                .id(active.getId())
+                .userId(active.getUser().getId())
+                .planId(active.getPlan().getId())
+                .planCode(active.getPlan().getCode())
+                .status(active.getStatus())
+                .startAt(active.getStartAt())
+                .endAt(active.getEndAt())
+                .build();
+
+        return ResponseEntity.ok(dto);
+    }
+
 }

@@ -101,66 +101,42 @@ public class SubscriptionService {
         Subscription s = subRepo.findById(subscriptionId)
                 .orElseThrow(() -> new RuntimeException("SUB_NOT_FOUND"));
 
-        // idempotent – webhook gọi nhiều lần vẫn an toàn
+        // Idempotent
         if ("ACTIVE".equalsIgnoreCase(s.getStatus())) {
             return s;
         }
 
-        Plan p = s.getPlan();
+        Long userId = s.getUser().getId();
         LocalDateTime now = LocalDateTime.now();
+        Plan p = s.getPlan();
 
+        // 1) Tìm subscription ACTIVE cũ (nếu có và khác subscription đang kích hoạt)
+        Subscription oldActive = subRepo.findActiveByUserId(userId)
+                .filter(active -> !active.getId().equals(s.getId()))
+                .orElse(null);
+
+        // 2) Activate subscription mới trước
         s.setStatus("ACTIVE");
         s.setStartAt(now);
         s.setEndAt(now.plusMonths(p.getDurationMonths()));
-
         s.setCurrentPeriodStart(now);
         s.setCurrentPeriodEnd(now.plusMonths(1));
 
-        // UPDATE USER ROLE khi mua gói
-        User user = s.getUser();
-        upgradeUserRole(user, p);
-
         Subscription saved = subRepo.save(s);
 
-        // Nếu bạn có SubscriptionUsage
-        // initMonthlyUsage(saved);
+        // 3) Đóng subscription cũ => EXPIRED (KHÔNG delete)
+        if (oldActive != null) {
+            oldActive.setStatus("EXPIRED");
+            oldActive.setEndAt(now);
+
+            // nếu muốn rõ ràng chu kỳ cũng kết thúc tại đây
+            oldActive.setCurrentPeriodEnd(now);
+
+            // (Optional) nếu bạn muốn giữ startAt cũ thì không đụng startAt
+            subRepo.save(oldActive);
+        }
 
         return saved;
-    }
-
-    /**
-     * Upgrade role của user dựa vào plan đã mua
-     * HR + plan VIP -> HR_VIP
-     * USER + plan VIP -> USER_VIP
-     */
-    private void upgradeUserRole(User user, Plan plan) {
-        String audience = plan.getAudience(); // "HR" hoặc "USER"
-        String tier = plan.getTier(); // "BASIC" hoặc "VIP"
-
-        if (audience == null || tier == null) {
-            return; // không có đủ thông tin để upgrade
-        }
-
-        String newRoleName = null;
-
-        // Xác định role mới dựa vào audience và tier
-        if ("HR".equalsIgnoreCase(audience) && "VIP".equalsIgnoreCase(tier)) {
-            newRoleName = "HR_VIP";
-        } else if ("HR".equalsIgnoreCase(audience) && "BASIC".equalsIgnoreCase(tier)) {
-            newRoleName = "HR";
-        } else if ("USER".equalsIgnoreCase(audience) && "VIP".equalsIgnoreCase(tier)) {
-            newRoleName = "USER_VIP";
-        } else if ("USER".equalsIgnoreCase(audience) && "BASIC".equalsIgnoreCase(tier)) {
-            newRoleName = "USER";
-        }
-
-        if (newRoleName != null) {
-            Role newRole = roleRepo.findByName(newRoleName);
-            if (newRole != null) {
-                user.setRole(newRole);
-                userRepo.save(user);
-            }
-        }
     }
 
     @Transactional
@@ -173,17 +149,23 @@ public class SubscriptionService {
         User u = userRepo.findById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
         Plan p = planRepo.findById(planId).orElseThrow(() -> new RuntimeException("PLAN_NOT_FOUND"));
 
-        // CHECK: Đã có subscription active chưa
-        Optional<Subscription> existingActive = subRepo.findActiveByUserId(userId);
-        if (existingActive.isPresent()) {
-            throw new RuntimeException("USER_ALREADY_HAS_ACTIVE_SUBSCRIPTION");
-        }
+        // KHÔNG CHẶN active nữa — vì bạn sẽ replace khi webhook SUCCESS
 
-        // CHECK: Có PENDING_PAYMENT chưa thanh toán không
-//        List<Subscription> pending = subRepo.findByUserIdAndStatus(userId, "PENDING_PAYMENT");
-//        if (!pending.isEmpty()) {
-//            throw new RuntimeException("USER_HAS_PENDING_PAYMENT");
-//        }
+        // Kiểm tra nếu đang có pending với CÙNG planId thì trả về, nếu khác planId thì
+        // hủy và tạo mới
+        List<Subscription> pending = subRepo.findByUserIdAndStatus(userId, "PENDING_PAYMENT");
+        if (!pending.isEmpty()) {
+            Subscription existingPending = pending.get(0);
+
+            // Nếu cùng plan, trả về pending hiện có
+            if (existingPending.getPlan().getId().equals(planId)) {
+                return existingPending;
+            }
+
+            // Nếu khác plan, hủy pending cũ và tạo mới
+            existingPending.setStatus("CANCELED");
+            subRepo.save(existingPending);
+        }
 
         Subscription s = Subscription.builder()
                 .user(u)
@@ -192,6 +174,13 @@ public class SubscriptionService {
                 .build();
 
         return subRepo.save(s);
+    }
+
+    public Subscription findActiveSubscription(Long userId) {
+        return subRepo
+                .findFirstByUser_IdAndStatusOrderByEndAtDesc(userId, "ACTIVE")
+                .filter(s -> s.getEndAt() == null || s.getEndAt().isAfter(LocalDateTime.now()))
+                .orElse(null);
     }
 
 }

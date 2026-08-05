@@ -19,4 +19,6 @@ public interface JobRepository extends JpaRepository<Job, Long>,
         List<Job> findBySkillsIn(List<Skill> skills);
 
         Page<Job> findByIdIn(List<Long> favoriteJobs, Pageable pageable);
+
+        long countByActive(boolean active);
 }

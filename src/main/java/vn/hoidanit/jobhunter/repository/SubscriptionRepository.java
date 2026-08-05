@@ -18,4 +18,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @Query("SELECT s FROM Subscription s WHERE s.user.id = :userId AND s.status = :status")
     List<Subscription> findByUserIdAndStatus(Long userId, String status);
 
+
+    Optional<Subscription> findFirstByUser_IdAndStatusOrderByEndAtDesc(Long userId, String status);
+
+
 }

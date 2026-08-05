@@ -18,10 +18,18 @@ public class UserProfileService {
     private final UserProfileRepository userProfileRepository;
 
     public void createUserProfileForUser(User user) {
-        // TODO Auto-generated method stub
+        // Check if UserProfile already exists for this user
+        UserProfile existingProfile = this.userProfileRepository.findByUserId(user.getId());
+        if (existingProfile != null) {
+            log.info("UserProfile already exists for user id: {}", user.getId());
+            return;
+        }
+
+        // Create new UserProfile
         UserProfile userProfile = new UserProfile();
         userProfile.setUser(user);
         this.userProfileRepository.save(userProfile);
+        log.info("Created new UserProfile for user id: {}", user.getId());
     }
 
     public UserProfile updateUserProfile(Long id, UserProfile userProfile) {
